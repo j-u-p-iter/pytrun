@@ -4,7 +4,6 @@ import types
 import sys
 import os
 from .cprint import cprint
-from .assertion import PytrunAssertionError 
 from .reporter import Reporter
 
 
@@ -35,31 +34,42 @@ class Runner:
     def load_tests(self, file_path):
         module = self.load_module(file_path)
 
-        tests = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("test_")]
+        self.tests = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("test_")]
 
-        return tests
+        self.before_all = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("before_all")]
+        self.after_all = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("after_all")]
+
+        self.before_each = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("before_each")]
+        self.after_each = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("after_each")]
 
     def run_tests_for_file(self, file_path):
-        tests = self.load_tests(file_path)
+        self.load_tests(file_path)
 
-        for test in tests:
+        for before_all in self.before_all:
+            before_all[1]()
+
+        for test in self.tests:
             (test_name, test_fn) = test
 
-            try:
-                test_fn()
-                cprint(f"{test_name} - success", "success")
+            [message, error] = test_fn()
+
+            if not error:
+                cprint(f"{message}", "success")
                 self.results["passes"] += 1
 
-            except PytrunAssertionError as error:
-                cprint(f"{test_name} - failure: {error.message}", "failure")
+            elif error["type"] == 'PytrunAssertionError':
+                cprint(f"{message}: {error["message"]}", "failure")
                 self.results["fails"] += 1
 
-            except AssertionError:
-                cprint(f"{test_name} - failure", "failure")
+            elif error["type"] == 'AssertionError':
+                cprint(f"{message}", "failure")
                 self.results["fails"] += 1
 
-            except Exception:
+            else:
                 self.results["errors"] += 1
+
+        for after_all in self.after_all:
+            after_all[1]()
 
 
     def run_all_tests(self):
