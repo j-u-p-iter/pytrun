@@ -6,7 +6,6 @@ import os
 from .cprint import cprint
 from .reporter import Reporter
 
-
 class Runner:
     def __init__(self, path):
         self.file_paths = [] 
@@ -31,19 +30,36 @@ class Runner:
 
         return module
 
+    def find_tests_name(self, module):
+        try:
+          return [m for m in getmembers(module) if m[0] == "tests_name"][0][1]
+        except Exception:
+            raise Exception("Tests should have a name")
+
+    def find_test_members(self, module, test_member_name):
+        return [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith(test_member_name)]
+
     def load_tests(self, file_path):
         module = self.load_module(file_path)
 
-        self.tests = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("test_")]
+        self.tests_name = self.find_tests_name(module)
 
-        self.before_all = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("before_all")]
-        self.after_all = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("after_all")]
+        self.tests = self.find_test_members(module, "test_")
 
-        self.before_each = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("before_each")]
-        self.after_each = [m for m in getmembers(module) if isfunction(m[1]) and m[0].startswith("after_each")]
+        self.before_all = self.find_test_members(module, "before_all")
+        self.after_all = self.find_test_members(module, "after_all")
+
+        self.before_each = self.find_test_members(module, "before_each")
+        self.after_each = self.find_test_members(module, "after_each")
 
     def run_tests_for_file(self, file_path):
         self.load_tests(file_path)
+
+        number_of_tests_in_file = len(self.tests)
+
+        print(file_path)
+
+        print(f"{self.tests_name} ({number_of_tests_in_file})")
 
         for before_all in self.before_all:
             before_all[1]()
@@ -51,18 +67,23 @@ class Runner:
         for test in self.tests:
             (test_name, test_fn) = test
 
-            [message, error] = test_fn()
+            try:
+              [test_description, error] = test_fn()
+            except Exception:
+                raise Exception('Test should have a description') 
+
+            result_description = test_description or test_name
 
             if not error:
-                cprint(f"{message}", "success")
+                cprint(f"✓ {result_description}", "success", 2)
                 self.results["passes"] += 1
 
             elif error["type"] == 'PytrunAssertionError':
-                cprint(f"{message}: {error["message"]}", "failure")
+                cprint(f"× {result_description}: {error["message"]}", "failure", 2)
                 self.results["fails"] += 1
 
             elif error["type"] == 'AssertionError':
-                cprint(f"{message}", "failure")
+                cprint(f"× {result_description}", "failure", 2)
                 self.results["fails"] += 1
 
             else:
@@ -76,6 +97,7 @@ class Runner:
         for file_path in self.file_paths:
             self.results["files"] += 1
             self.run_tests_for_file(file_path)
+            print("\n")
 
         reporter = Reporter(self.results)
 

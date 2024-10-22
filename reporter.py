@@ -7,8 +7,6 @@ class Reporter:
     def report(self):
         total_number_of_tests = self.results["passes"] + self.results["fails"] + self.results["errors"]
 
-        print('\n')
-
         print(f"Test files\t{self.results["files"]}")
         print(f"Tests\t{total_number_of_tests}")
 
